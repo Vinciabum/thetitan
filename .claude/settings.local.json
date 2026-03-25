@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/user/Desktop/autogram-main/core -type f -name *.py)",
+      "Bash(pip show:*)",
+      "Bash(pip install:*)",
+      "Bash(python -m pytest --collect-only)",
+      "Bash(python -m pytest tests/test_context_engine.py -v)",
+      "Bash(python -m pytest tests/test_context_engine.py::test_fetch_news_returns_news_items -v)",
+      "Bash(python -m pytest tests/test_psychological_engine.py -v)",
+      "Bash(python -m pytest tests/test_psychological_engine.py::test_generate_returns_five_slides -v)",
+      "Bash(python -m pytest tests/test_slide_generator.py -v)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(python -c \"from core.agent import AINewsAgent; print\\(''Import OK''\\)\")",
+      "Bash(python -c \":*)",
+      "Bash(python -m pytest tests/test_dashboard_state.py -v)",
+      "Bash(python -m pytest tests/test_threads_publisher.py -v)",
+      "Bash(python -m py_compile dashboard/app.py)",
+      "Bash(python -c \"from dashboard.components.slide_card import render_five_slides; from dashboard.components.status_badge import render_status_badge, STATE_CONFIG; print\\(''OK'', len\\(STATE_CONFIG\\)\\)\")",
+      "Bash(python -m py_compile dashboard/pages/01_preview.py)",
+      "Bash(python -m py_compile dashboard/pages/02_monitor.py)",
+      "Bash(python -m py_compile dashboard/pages/03_settings.py)",
+      "Bash(python -m streamlit --version)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\user\\Desktop\\autogram-main\\docs\\superpowers"
+    ]
+  }
+}

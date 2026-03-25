@@ -1,0 +1,13 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+output/
+agent_memory.json
+dashboard_state.json
+*.log
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
