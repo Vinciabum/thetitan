@@ -28,32 +28,37 @@ from typing import Any
 # 5슬라이드 역할 정의
 SLIDE_ROLES = ["Hook", "Context", "Insight", "Action", "Outro"]
 
-# 미니멀리즘 이미지 프롬프트 (페이지별)
+# 시네마틱 배경 이미지 프롬프트 (페이지별, 텍스트 없음)
 IMAGE_PROMPT_TEMPLATES = {
     "Hook": (
-        "minimalist black and white photography, empty wooden chair near window, "
-        "soft diffused morning light, shallow depth of field, negative space, "
-        "contemplative mood, no people, fine art photography style"
+        "cinematic moody photography, Korean office worker silhouette seen from behind, late evening, "
+        "looking out floor-to-ceiling office window at city lights below, "
+        "dark atmospheric, warm amber city glow, shallow depth of field, "
+        "no text, no faces visible, fine art photography"
     ),
     "Context": (
-        "minimalist street photography, early morning empty city street, "
-        "gentle rain reflections on pavement, muted tones, solitary atmosphere, "
-        "documentary style, natural light, no text"
+        "cinematic street photography, empty subway platform late at night, Seoul Metro, "
+        "warm tungsten light reflecting on wet floor tiles, "
+        "solitary figure waiting in distance, atmospheric, moody, "
+        "no text, dark tones with warm light pockets"
     ),
     "Insight": (
-        "minimalist still life, single open book on wooden desk, "
-        "warm sunlight through sheer curtain, dust particles in light, "
-        "peaceful and philosophical mood, soft shadows, high contrast"
+        "cinematic still photography, warm reading lamp light on wooden desk, "
+        "open journal and pen, steaming cup of tea, soft bokeh background, "
+        "cozy but contemplative mood, warm amber tones, "
+        "no text visible, intimate and philosophical atmosphere"
     ),
     "Action": (
-        "minimalist nature photography, single path through misty forest, "
-        "leading lines, soft morning fog, hopeful and forward-moving mood, "
-        "green tones, serene atmosphere"
+        "cinematic nature photography, lone person walking narrow path through misty bamboo forest at dawn, "
+        "seen from behind, soft morning fog, hopeful forward motion, "
+        "cool-to-warm tones, leading lines toward light, "
+        "no text, serene and purposeful mood"
     ),
     "Outro": (
-        "minimalist window photography, looking out to dawn sky, "
-        "warm golden hour light, curtain gently moving, "
-        "sense of possibility and new beginning, soft bokeh"
+        "cinematic window photography, apartment window view of Seoul dawn skyline, "
+        "warm golden hour light beginning to emerge, curtain softly blurred in foreground, "
+        "sense of new beginning and quiet resolve, "
+        "no text, soft glowing tones, peaceful atmosphere"
     ),
 }
 

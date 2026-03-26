@@ -99,15 +99,15 @@ class ReplicateImageGenerator(ImageGenerator):
 
 
 class GeminiImageGenerator(ImageGenerator):
-    """Google Gemini 3 Pro image generation (gemini-3-pro-image-preview).
-    
+    """Google Gemini image generation (gemini-2.0-flash-preview-image-generation).
+
     Higher quality, follows complex instructions, supports text rendering.
     """
-    
+
     def __init__(self, api_key: str, config: Dict[str, Any]):
         self.client = genai.Client(api_key=api_key)
         self.config = config
-        self.model = config.get("model", "gemini-3-pro-image-preview")
+        self.model = config.get("model", "gemini-2.5-flash-image")
         self.aspect_ratio = config.get("aspect_ratio", "1:1")
     
     async def generate(self, prompt: str, output_path: Path) -> Optional[Path]:

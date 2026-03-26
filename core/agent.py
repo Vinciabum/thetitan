@@ -100,7 +100,7 @@ class AgentConfig(BaseModel):
         "default_provider": "gemini",
         "providers": {
             "gemini": {
-                "model": "gemini-3-pro-image-preview",
+                "model": "gemini-2.5-flash-image",
                 "aspect_ratio": "1:1"
             },
             "openai": {
