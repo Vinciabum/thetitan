@@ -59,28 +59,73 @@ col4.metric("대기 콘텐츠", "있음" if state.get("pending_content") else "�
 st.markdown('<hr style="border-color:#2C2C2C; margin:24px 0;">', unsafe_allow_html=True)
 st.markdown("### 🎛 에이전트 제어")
 
-col_start, col_stop, _ = st.columns([1, 1, 3])
+col_start, col_stop, col_msg = st.columns([1, 1, 3])
 
 with col_start:
     if st.button("▶ 에이전트 시작", use_container_width=True):
         try:
-            subprocess.Popen(
+            project_root = str(Path(__file__).parent.parent.parent)
+            proc = subprocess.Popen(
                 [sys.executable, "main.py"],
-                cwd=str(Path(__file__).parent.parent.parent)
+                cwd=project_root,
+                stdout=open(project_root + "/agent_run.log", "w"),
+                stderr=subprocess.STDOUT,
             )
-            st.success("에이전트를 시작했습니다.")
+            # 즉시 상태 파일에 반영
+            state["agent_state"] = "collecting_news"
+            state["agent_log"] = state.get("agent_log", [])
+            state["agent_log"].insert(0, f"[{__import__('datetime').datetime.now().strftime('%H:%M:%S')}] 에이전트 시작 (PID: {proc.pid})")
+            state["agent_log"] = state["agent_log"][:20]
+            save_state(state)
+            with col_msg:
+                st.success(f"에이전트 시작됨 (PID: {proc.pid}) — 5초 후 상태가 업데이트됩니다.")
         except Exception as e:
-            st.error(f"시작 실패: {e}")
+            with col_msg:
+                st.error(f"시작 실패: {e}")
 
 with col_stop:
     if st.button("⏹ 에이전트 중지", use_container_width=True):
         try:
-            subprocess.run(["taskkill", "/F", "/IM", "python.exe"], capture_output=True)
+            subprocess.run(
+                ["taskkill", "/F", "/FI", "IMAGENAME eq python.exe", "/FI", "WINDOWTITLE eq main*"],
+                capture_output=True
+            )
+            # main.py 프로세스만 종료 시도
+            subprocess.run(
+                ["wmic", "process", "where", "commandline like '%main.py%'", "delete"],
+                capture_output=True
+            )
             state["agent_state"] = "idle"
             save_state(state)
-            st.success("에이전트를 중지했습니다.")
+            with col_msg:
+                st.success("에이전트를 중지했습니다.")
         except Exception as e:
-            st.error(f"중지 실패: {e}")
+            with col_msg:
+                st.error(f"중지 실패: {e}")
+
+st.markdown('<hr style="border-color:#2C2C2C; margin:24px 0;">', unsafe_allow_html=True)
+st.markdown("### 📜 에이전트 로그")
+agent_log = state.get("agent_log", [])
+if agent_log:
+    log_html = "".join(
+        f'<div style="font-family:monospace; font-size:0.8rem; color:#8B7355; padding:2px 0;">{entry}</div>'
+        for entry in agent_log[:10]
+    )
+    st.markdown(f'<div style="background:#1A1A1A; border:1px solid #2C2C2C; border-radius:8px; padding:12px;">{log_html}</div>', unsafe_allow_html=True)
+
+    # agent_run.log 파일이 있으면 마지막 5줄 보여주기
+    log_file = Path(__file__).parent.parent.parent / "agent_run.log"
+    if log_file.exists():
+        lines = log_file.read_text(encoding="utf-8", errors="ignore").strip().splitlines()
+        if lines:
+            recent = lines[-5:]
+            recent_html = "".join(
+                f'<div style="font-family:monospace; font-size:0.75rem; color:#C9A96E; padding:1px 0;">{l}</div>'
+                for l in recent
+            )
+            st.markdown(f'<div style="background:#1A1A1A; border:1px solid #C9A96E; border-radius:8px; padding:12px; margin-top:8px;">{recent_html}</div>', unsafe_allow_html=True)
+else:
+    st.markdown('<p style="color:#8B7355; font-size:0.85rem;">로그 없음</p>', unsafe_allow_html=True)
 
 st.markdown('<hr style="border-color:#2C2C2C; margin:24px 0;">', unsafe_allow_html=True)
 st.markdown("### 📋 최근 포스팅 기록")

@@ -16,16 +16,13 @@ from pathlib import Path
 from typing import List, Dict, Optional, Any, Set
 import aiohttp
 import google.generativeai as genai
-import replicate
 import requests
 from dotenv import load_dotenv
 from gnews import GNews
-from instagrapi import Client
 from pydantic import BaseModel
 from io import BytesIO
 from PIL import Image
 import re
-from openai import OpenAI
 
 from .image_generator import ImageGeneratorFactory, ImageGenerator
 from .context_engine import ContextEngine
@@ -245,6 +242,7 @@ class AINewsAgent:
                 self.logger.warning(f"Image generator ({self.config.image_generation['default_provider']}) not configured")
 
             if all(k in self.config.credentials for k in ["IG_USERNAME", "IG_PASSWORD"]):
+                from instagrapi import Client
                 self.instagram = Client()
                 self._login_instagram()
             else:

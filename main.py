@@ -23,11 +23,15 @@ def load_agent_config(config_path: str = "agent_config.json") -> AgentConfig:
         "memory_path": "agent_memory.json",
         "output_dir": "./output",
         "credentials": {
-            "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY"),
-            "REPLICATE_API_TOKEN": os.getenv("REPLICATE_API_TOKEN"),
-            "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
-            "IG_USERNAME": os.getenv("IG_USERNAME"),
-            "IG_PASSWORD": os.getenv("IG_PASSWORD")
+            k: v for k, v in {
+                "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY"),
+                "REPLICATE_API_TOKEN": os.getenv("REPLICATE_API_TOKEN"),
+                "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
+                "IG_USERNAME": os.getenv("IG_USERNAME"),
+                "IG_PASSWORD": os.getenv("IG_PASSWORD"),
+                "THREADS_ACCESS_TOKEN": os.getenv("THREADS_ACCESS_TOKEN"),
+                "THREADS_USER_ID": os.getenv("THREADS_USER_ID"),
+            }.items() if v is not None
         }
     }
 

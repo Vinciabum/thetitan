@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 import aiohttp
-import replicate
 from google import genai
 from google.genai import types
 from PIL import Image
@@ -71,6 +70,7 @@ class ReplicateImageGenerator(ImageGenerator):
     """Replicate API implementation."""
     
     def __init__(self, api_token: str, config: Dict[str, Any]):
+        import replicate  # lazy import — broken on Python 3.14 with pydantic v1
         self.client = replicate.Client(api_token=api_token)
         self.config = config
     
