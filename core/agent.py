@@ -15,7 +15,7 @@ from enum import Enum
 from pathlib import Path
 from typing import List, Dict, Optional, Any, Set
 import aiohttp
-import google.generativeai as genai
+from google import genai as google_genai
 import requests
 from dotenv import load_dotenv
 from gnews import GNews
@@ -28,6 +28,7 @@ from .image_generator import ImageGeneratorFactory, ImageGenerator
 from .context_engine import ContextEngine
 from .psychological_engine import PsychologicalEngine
 from .slide_generator import SlideGenerator
+from .threads_publisher import ThreadsPublisher
 import sys as _sys
 _sys.path.insert(0, str(Path(__file__).parent.parent))
 from dashboard.state import load_state, save_state
@@ -174,6 +175,16 @@ class BrandManager:
             return None
 
 
+class _GeminiAdapter:
+    """google.genai Client를 기존 generate_content(prompt) → response.text 인터페이스로 래핑"""
+    def __init__(self, client: google_genai.Client, model: str):
+        self._client = client
+        self._model = model
+
+    def generate_content(self, prompt: str):
+        return self._client.models.generate_content(model=self._model, contents=prompt)
+
+
 class AINewsAgent:
 
     def __init__(self, config: AgentConfig, theme: BrandTheme):
@@ -225,8 +236,8 @@ class AINewsAgent:
     def _init_ai_components(self) -> None:
         try:
             if self.config.credentials.get("GEMINI_API_KEY"):
-                genai.configure(api_key=self.config.credentials["GEMINI_API_KEY"])
-                self.content_analyzer = genai.GenerativeModel("gemini-1.5-flash")
+                _client = google_genai.Client(api_key=self.config.credentials["GEMINI_API_KEY"])
+                self.content_analyzer = _GeminiAdapter(_client, "gemini-2.5-flash")
             else:
                 self.content_analyzer = None
                 self.logger.warning("Gemini AI not configured")
@@ -248,6 +259,17 @@ class AINewsAgent:
             else:
                 self.instagram = None
                 self.logger.warning("Instagram client not configured")
+
+            # Threads 초기화
+            if all(k in self.config.credentials for k in ["THREADS_ACCESS_TOKEN", "THREADS_USER_ID"]):
+                self.threads = ThreadsPublisher(
+                    access_token=self.config.credentials["THREADS_ACCESS_TOKEN"],
+                    user_id=self.config.credentials["THREADS_USER_ID"],
+                )
+                self.logger.info("Threads 클라이언트 초기화 완료")
+            else:
+                self.threads = None
+                self.logger.warning("Threads 미설정 — Threads 포스팅 비활성화")
 
             # Monologue 엔진 초기화
             self.context_engine = ContextEngine()
@@ -319,16 +341,33 @@ class AINewsAgent:
             self.logger.warning("이미지 생성 실패 - 사이클 중단")
             return
 
-        # 4. Instagram 카루셀 포스팅
+        # 4. Instagram + Threads 포스팅
         self.state = AgentState.POSTING
         caption = monologue.instagram_caption + "\n\n" + " ".join(monologue.hashtags)
-        content = {"images": image_paths, "caption": caption}
-        success = await self._post_content(content)
+
+        # Instagram 카루셀
+        ig_success = await self._post_content({"images": image_paths, "caption": caption})
+
+        # Threads 텍스트 (Hook + 캡션 요약)
+        threads_success = False
+        if self.threads:
+            threads_text = (
+                monologue.slides[0].text.replace("\\n", "\n") + "\n\n"
+                + monologue.instagram_caption + "\n\n"
+                + " ".join(monologue.hashtags)
+            )
+            threads_success = await self.threads.publish(threads_text)
+            if threads_success:
+                self.logger.info("Threads 포스팅 성공")
+            else:
+                self.logger.warning("Threads 포스팅 실패")
+
+        success = ig_success
         self._update_dashboard_after_post(success, caption)
 
         if success:
             self.metrics.successful_posts += 1
-            self.logger.info("Monologue 포스팅 성공")
+            self.logger.info(f"Monologue 포스팅 완료 — IG:{ig_success} Threads:{threads_success}")
         else:
             self.metrics.failed_posts += 1
 

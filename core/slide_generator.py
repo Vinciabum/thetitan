@@ -1,8 +1,7 @@
 """
-Slide Generator - 디자인 시스템 v2
-  Hook  (slide 1) : 순수 블랙 + 초대형 볼드 텍스트  (이미지 없음)
-  Body  (slide 2-4): Gemini 배경 이미지 상단 60% + 순수 블랙 하단 40% + 텍스트
-  Outro (slide 5) : Body 동일 방식
+Slide Generator - Design System v3 (@onestepahead.mag 스타일)
+  전슬라이드: B&W 빈티지 풀블리드 사진 + 텍스트 오버레이
+  레퍼런스: research/reference_design_analysis.md
 """
 import asyncio
 from pathlib import Path
@@ -13,19 +12,25 @@ from PIL import Image, ImageDraw, ImageFont
 from core.image_generator import ImageGenerator
 from core.psychological_engine import MonologueContent, SlideContent
 
-# ── 디자인 상수 ────────────────────────────────────────────
+
 CANVAS_SIZE = (1080, 1080)
 W, H        = CANVAS_SIZE
-ACCENT      = (201, 169, 110)   # #C9A96E  웜 골드
+
 WHITE       = (255, 255, 255)
-GREY        = (140, 130, 115)   # 서브텍스트
-LGREY       = (80,  75,  68)    # 페이지 번호
-BLACK       = (0,   0,   0)
+WHITE_DIM   = (200, 200, 200)   # 본문 텍스트 (살짝 어둡게)
+GREY        = (135, 135, 135)   # 레이블, 페이지 번호, 브랜드
 
 FONT_BOLD    = r"C:\Windows\Fonts\malgunbd.ttf"
 FONT_REGULAR = r"C:\Windows\Fonts\malgun.ttf"
 
-IMAGE_SPLIT  = 0.60   # 이미지가 차지하는 상단 비율
+# 슬라이드 상단 레이블 (영문 소캡스)
+ROLE_LABEL = {
+    "Hook":    "",           # 커버 — 레이블 없음
+    "Context": "CONTEXT",
+    "Insight": "INSIGHT",
+    "Action":  "ACTION",
+    "Outro":   "OUTRO",
+}
 
 
 def _load(path: str, size: int) -> ImageFont.FreeTypeFont:
@@ -36,170 +41,146 @@ def _load(path: str, size: int) -> ImageFont.FreeTypeFont:
 
 
 class SlideGenerator:
-    """5슬라이드 카드뉴스 이미지 생성"""
+    """5슬라이드 카드뉴스 이미지 생성 — onestepahead.mag 스타일"""
 
     def __init__(self, image_generator: ImageGenerator, output_dir: Path):
         self.image_generator = image_generator
-        self.output_dir = output_dir
+        self.output_dir      = output_dir
 
-    # ── public ────────────────────────────────────────────────
+    # ── public ──────────────────────────────────────────────────
     async def generate_slide_images(self, content: MonologueContent) -> List[Path]:
-        tasks = [self._generate_one(slide) for slide in content.slides]
+        tasks   = [self._generate_one(slide) for slide in content.slides]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         return [r for r in results if isinstance(r, Path)]
 
-    # ── private ───────────────────────────────────────────────
+    # ── private ─────────────────────────────────────────────────
     async def _generate_one(self, slide: SlideContent) -> Optional[Path]:
         out = self.output_dir / f"slide_{slide.page:02d}_{slide.role.lower()}.jpg"
         try:
-            if slide.role == "Hook":
-                img = await asyncio.to_thread(self._make_hook, slide)
-            else:
-                img = await self._make_body(slide)
+            bg_path   = self.output_dir / f"_bg_{slide.page:02d}.jpg"
+            bg_result = await self.image_generator.generate(slide.image_prompt, bg_path)
 
+            if bg_result and Path(bg_result).exists():
+                # PIL로 흑백 변환 (L → RGB)
+                bg = Image.open(bg_result).convert("L").convert("RGB")
+            else:
+                bg = Image.new("RGB", CANVAS_SIZE, (28, 28, 28))
+
+            img = await asyncio.to_thread(self._composite, bg, slide)
             img.save(out, "JPEG", quality=95)
+
+            if bg_path.exists():
+                bg_path.unlink()
             return out
+
         except Exception as e:
             print(f"[SlideGenerator] slide {slide.page} 실패: {e}")
             return None
 
-    # ── Hook 슬라이드 ──────────────────────────────────────────
-    def _make_hook(self, slide: SlideContent) -> Image.Image:
-        img  = Image.new("RGB", CANVAS_SIZE, BLACK)
-        draw = ImageDraw.Draw(img)
+    # ── 합성 메인 ────────────────────────────────────────────────
+    def _composite(self, bg: Image.Image, slide: SlideContent) -> Image.Image:
+        # 1. 풀블리드 흑백 배경
+        canvas = bg.resize(CANVAS_SIZE, Image.LANCZOS).convert("RGBA")
 
-        f_huge = _load(FONT_BOLD,    84)
-        f_sub  = _load(FONT_REGULAR, 34)
-        f_tiny = _load(FONT_REGULAR, 22)
-
-        # ① 메인 텍스트 (자동 줄바꿈, 상단 1/3에서 시작)
-        lines  = self._split_hook(slide.text, f_huge, draw)
-        y      = 170
-        for line in lines:
-            draw.text((70, y), line, font=f_huge, fill=WHITE)
-            b  = draw.textbbox((0, 0), line, font=f_huge)
-            y += (b[3] - b[1]) + 16
-
-        # ② 골드 구분선
-        sep_y = y + 36
-        draw.line([(70, sep_y), (min(520, W - 70), sep_y)], fill=ACCENT, width=2)
-
-        # ③ 서브텍스트 (슬라이드 text의 뒷부분이 있을 경우 활용, 없으면 생략)
-        sub = getattr(slide, "sub_text", None)
-        if sub:
-            y2 = sep_y + 28
-            for s in sub.split("\n"):
-                draw.text((70, y2), s, font=f_sub, fill=GREY)
-                b  = draw.textbbox((0, 0), s, font=f_sub)
-                y2 += (b[3] - b[1]) + 8
-
-        # ④ 하단 레이블
-        self._draw_bottom_labels(draw, f_tiny, slide)
-
-        return img
-
-    # ── Body / Outro 슬라이드 ─────────────────────────────────
-    async def _make_body(self, slide: SlideContent) -> Image.Image:
-        bg_path = self.output_dir / f"_bg_{slide.page:02d}.jpg"
-
-        # 배경 이미지 생성
-        bg_result = await self.image_generator.generate(slide.image_prompt, bg_path)
-
-        if bg_result and Path(bg_result).exists():
-            bg = Image.open(bg_result).convert("RGB")
-        else:
-            bg = Image.new("RGB", CANVAS_SIZE, (18, 16, 14))
-
-        img = await asyncio.to_thread(self._composite_body, bg, slide)
-
-        if bg_path.exists():
-            bg_path.unlink()
-
-        return img
-
-    def _composite_body(self, bg: Image.Image, slide: SlideContent) -> Image.Image:
-        # ── 캔버스: 순수 블랙 ─────────────────────────────────
-        canvas = Image.new("RGB", CANVAS_SIZE, BLACK)
-
-        # ── 상단 60%: Gemini 이미지 ───────────────────────────
-        img_h  = int(H * IMAGE_SPLIT)
-        top    = bg.resize((W, H), Image.LANCZOS).crop((0, 0, W, img_h))
-        canvas.paste(top, (0, 0))
+        # 2. 하단 그라디언트 오버레이 — 텍스트 가독성 확보
+        overlay = Image.new("RGBA", CANVAS_SIZE, (0, 0, 0, 0))
+        ov      = ImageDraw.Draw(overlay)
+        g_top   = int(H * 0.28)   # 그라디언트 시작 y
+        for y in range(g_top, H):
+            t     = (y - g_top) / (H - g_top)
+            alpha = int(t ** 0.65 * 200)
+            ov.line([(0, y), (W, y)], fill=(0, 0, 0, alpha))
+        canvas = Image.alpha_composite(canvas, overlay).convert("RGB")
 
         draw = ImageDraw.Draw(canvas)
 
-        # ── 골드 구분선 ───────────────────────────────────────
-        draw.line([(70, img_h), (W - 70, img_h)], fill=ACCENT, width=1)
+        # 폰트
+        f_meta  = _load(FONT_REGULAR, 19)   # 레이블·페이지·브랜드
+        f_hook  = _load(FONT_BOLD,    70)   # Hook 대형 제목
+        f_title = _load(FONT_BOLD,    52)   # Body 소제목
+        f_body  = _load(FONT_REGULAR, 30)   # Body 본문
 
-        # ── 하단 텍스트 ───────────────────────────────────────
-        f_body = _load(FONT_BOLD,    46)
-        f_tiny = _load(FONT_REGULAR, 22)
+        # 3. 상단: 역할 레이블(좌) + 페이지 번호(우)
+        label = ROLE_LABEL.get(slide.role, "")
+        if label:
+            draw.text((60, 52), label, font=f_meta, fill=GREY)
 
-        max_w = W - 140
-        lines = self._wrap(slide.text, f_body, draw, max_w)
-        line_h = 56
-        total_h = len(lines) * line_h
+        page_str = f"{slide.page:02d} / 05"
+        pw       = draw.textlength(page_str, font=f_meta)
+        draw.text((W - 60 - pw, 52), page_str, font=f_meta, fill=GREY)
 
-        # 텍스트 블록을 하단 영역 중앙에 배치
-        area_top    = img_h + 24
-        area_bottom = H - 70
-        area_mid    = (area_top + area_bottom) // 2
-        y = area_mid - total_h // 2
-
-        for line in lines:
-            draw.text((70, y), line, font=f_body, fill=WHITE)
-            y += line_h
-
-        # ── 하단 레이블 ───────────────────────────────────────
-        self._draw_bottom_labels(draw, f_tiny, slide)
+        # 4. 본문 텍스트 배치
+        if slide.role == "Hook":
+            self._draw_hook(draw, slide.text, f_hook, f_meta)
+        else:
+            self._draw_body(draw, slide.text, f_title, f_body, f_meta)
 
         return canvas
 
-    # ── 공통 하단 레이블 ──────────────────────────────────────
-    def _draw_bottom_labels(self, draw: ImageDraw.ImageDraw,
-                            font: ImageFont.FreeTypeFont,
-                            slide: SlideContent) -> None:
-        draw.text((70, H - 52), "MONOLOGUE", font=font, fill=ACCENT)
+    # ── Hook (커버) ──────────────────────────────────────────────
+    def _draw_hook(self, draw: ImageDraw.ImageDraw,
+                   text: str,
+                   f_hook: ImageFont.FreeTypeFont,
+                   f_meta: ImageFont.FreeTypeFont) -> None:
+        """커버 슬라이드: 대형 Bold 후킹 텍스트 + 브랜드"""
+        max_w  = W - 120
+        lines  = self._wrap(text, f_hook, draw, max_w)[:3]
+        line_h = 86
+        y      = int(H * 0.50)
+        for line in lines:
+            draw.text((60, y), line, font=f_hook, fill=WHITE)
+            y += line_h
+        # 브랜드 하단 좌측
+        draw.text((60, H - 58), "MONOLOGUE", font=f_meta, fill=GREY)
 
-        page_str = f"{slide.page:02d}  /  05"
-        pw = draw.textlength(page_str, font=font)
-        draw.text((W - 70 - pw, H - 52), page_str, font=font, fill=LGREY)
+    # ── Body / Outro ─────────────────────────────────────────────
+    def _draw_body(self, draw: ImageDraw.ImageDraw,
+                   text: str,
+                   f_title: ImageFont.FreeTypeFont,
+                   f_body: ImageFont.FreeTypeFont,
+                   f_meta: ImageFont.FreeTypeFont) -> None:
+        """본문 슬라이드: 소제목(Bold) + 본문(Regular)
 
-        role_str = slide.role.lower()
-        rw = draw.textlength(role_str, font=font)
-        draw.text(((W - rw) // 2, H - 52), role_str, font=font, fill=GREY)
+        text 포맷: "소제목\\n\\n본문 설명 2~3문장"
+        소제목이 없는 경우(\\n\\n 없음): 전체를 소제목 스타일로 표시
+        """
+        max_w = W - 120
 
-    # ── 텍스트 유틸 ───────────────────────────────────────────
-    def _split_hook(self, text: str,
-                    font: ImageFont.FreeTypeFont,
-                    draw: ImageDraw.ImageDraw) -> List[str]:
-        """Hook 텍스트를 2-3개의 임팩트 있는 짧은 라인으로 분할"""
-        max_w = W - 140
+        if "\n\n" in text:
+            parts     = text.split("\n\n", 1)
+            title_raw = parts[0].strip()
+            body_raw  = parts[1].strip()
+        else:
+            title_raw = text.strip()
+            body_raw  = ""
 
-        # 쉼표/마침표/공백 기준 분할 우선 시도
-        import re
-        parts = re.split(r'(?<=[,，。.!?])\s*', text.strip())
-        parts = [p.strip() for p in parts if p.strip()]
+        y = int(H * 0.54)
 
-        # 각 파트가 max_w 넘으면 다시 wrapping
-        result = []
-        for part in parts:
-            result.extend(self._wrap(part, font, draw, max_w))
+        # 소제목 (Bold, 흰색)
+        t_lines = self._wrap(title_raw, f_title, draw, max_w)[:3]
+        for line in t_lines:
+            draw.text((60, y), line, font=f_title, fill=WHITE)
+            y += 66
 
-        # 라인이 1개면 강제로 중간에서 분할
-        if len(result) == 1:
-            result = self._wrap(text, font, draw, int(max_w * 0.55))
+        # 본문 (Regular, 살짝 어두운 흰색)
+        if body_raw:
+            y += 20
+            b_lines = self._wrap(body_raw, f_body, draw, max_w)[:4]
+            for line in b_lines:
+                draw.text((60, y), line, font=f_body, fill=WHITE_DIM)
+                y += 44
 
-        return result[:4]   # 최대 4줄
+        # 브랜드 하단 좌측
+        draw.text((60, H - 58), "MONOLOGUE", font=f_meta, fill=GREY)
 
+    # ── 텍스트 래핑 ──────────────────────────────────────────────
     @staticmethod
     def _wrap(text: str, font: ImageFont.FreeTypeFont,
               draw: ImageDraw.ImageDraw, max_w: int) -> List[str]:
-        """어절 단위 줄바꿈 (한국어)"""
+        """어절 단위 줄바꿈 (\\n 명시적 줄바꿈 존중)"""
         lines: List[str] = []
-        for paragraph in text.replace("\\n", "\n").split("\n"):
-            words   = paragraph.split()
-            current = ""
+        for para in text.replace("\\n", "\n").split("\n"):
+            words, current = para.split(), ""
             for word in words:
                 candidate = (current + " " + word).strip() if current else word
                 if draw.textlength(candidate, font=font) > max_w and current:
