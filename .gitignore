@@ -3,6 +3,10 @@ __pycache__/
 *.pyc
 *.pyo
 output/
+output_test/
+photos/
+slide_*.jpg
+test_*.jpg
 agent_memory.json
 dashboard_state.json
 *.log
