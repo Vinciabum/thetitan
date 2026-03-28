@@ -88,7 +88,7 @@ class PsychologicalEngine:
 - P2 (Context): 소제목 + 오늘의 뉴스·날씨·트렌드를 반영한 현재의 공기 묘사
 - P3 (Insight): 소제목 + 프랭클/스토아 철학 기반 따뜻한 통찰
 - P4 (Action): 소제목 + 오늘 당장 할 수 있는 아주 작고 구체적인 행동 1가지
-- P5 (Outro): 소제목 + 팔로워와 소통할 개방형 질문
+- P5 (Outro): 팔로워 모두가 공감할 수 있는 짧고 울림 있는 질문 하나만. 소제목 없이 질문 문장만 작성. 2줄 이내, 줄바꿈은 \n 사용. 예시: "오늘 하루,\n당신의 감정은 안녕했나요?"
 
 instagram_caption 작성 규칙 (아래 4파트를 이어서 하나의 문자열로):
   파트1: 오늘 Hook과 연결된 공감 문장 1줄 (직장인/번아웃/퇴근 키워드 자연 포함)
@@ -114,7 +114,7 @@ hashtags 규칙: 정확히 5개. #모노로그와 #직장인은 반드시 포함
     "p3_image": "black and white vintage film photography, [내용에 맞는 구체적 장면], 1960s style, soft film grain, no text",
     "p4_action": "소제목\\n\\n본문",
     "p4_image": "black and white vintage film photography, [내용에 맞는 구체적 장면], 1960s style, soft film grain, no text",
-    "p5_outro": "소제목\\n\\n본문",
+    "p5_outro": "질문 문장 (2줄 이내, \\n으로 줄바꿈)",
     "p5_image": "black and white vintage film photography, [내용에 맞는 구체적 장면], 1960s style, soft film grain, no text",
     "instagram_caption": "...",
     "hashtags": ["#모노로그", "#직장인", "#태그3", "#태그4", "#태그5"]
