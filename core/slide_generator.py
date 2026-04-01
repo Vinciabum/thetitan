@@ -28,8 +28,11 @@ WHITE       = (255, 255, 255)
 WHITE_DIM   = (200, 200, 200)   # 본문 텍스트 (살짝 어둡게)
 GREY        = (135, 135, 135)   # 레이블, 페이지 번호, 브랜드
 
-FONT_BOLD    = r"C:\Windows\Fonts\malgunbd.ttf"
-FONT_REGULAR = r"C:\Windows\Fonts\malgun.ttf"
+_FONT_DIR    = Path(__file__).parent.parent / "fonts"
+FONT_BOLD    = str(_FONT_DIR / "NotoSerifKR-Bold.ttf")
+FONT_SEMI    = str(_FONT_DIR / "NotoSerifKR-SemiBold.ttf")
+FONT_REGULAR = str(_FONT_DIR / "NotoSerifKR-Regular.ttf")
+FONT_META    = str(_FONT_DIR / "NotoSansKR-Bold.ttf")   # 레이블/브랜드는 산세리프 유지
 
 # 슬라이드 상단 레이블 (영문 소캡스)
 ROLE_LABEL = {
@@ -59,9 +62,9 @@ class SlideGenerator:
         pool_dir = photo_pool_dir or DEFAULT_PHOTO_POOL_DIR
         self.photo_pool = PhotoPool(pool_dir)
         if self.photo_pool.available():
-            print(f"[SlideGenerator] 📸 사진 풀 활성화: {self.photo_pool.count()}장 사용 가능 ({pool_dir})")
+            print(f"[SlideGenerator] 사진 풀 활성화: {self.photo_pool.count()}장 사용 가능 ({pool_dir})")
         else:
-            print(f"[SlideGenerator] ⚠️  사진 풀 없음 → AI 생성 이미지 사용 ('{pool_dir}' 에 사진 추가 시 품질 향상)")
+            print(f"[SlideGenerator] 사진 풀 없음 -> AI 생성 이미지 사용 ('{pool_dir}' 에 사진 추가 시 품질 향상)")
 
     # ── public ──────────────────────────────────────────────────
     async def generate_slide_images(self, content: MonologueContent) -> List[Path]:
@@ -102,13 +105,13 @@ class SlideGenerator:
                     self.photo_pool.prepare_image, photo, bg_path
                 )
                 if prepared and prepared.exists():
-                    print(f"  [Slide {slide.page}] 📸 로컬 사진 사용: {photo.name}")
+                    print(f"  [Slide {slide.page}] 로컬 사진 사용: {photo.name}")
                     return Image.open(prepared).convert("L").convert("RGB")
 
         # 2순위: AI 생성 이미지
         bg_result = await self.image_generator.generate(slide.image_prompt, bg_path)
         if bg_result and Path(bg_result).exists():
-            print(f"  [Slide {slide.page}] 🤖 AI 생성 이미지 사용")
+            print(f"  [Slide {slide.page}] AI 생성 이미지 사용")
             return Image.open(bg_result).convert("L").convert("RGB")
 
         # 3순위: 단색 배경
@@ -139,15 +142,15 @@ class SlideGenerator:
             alpha = int(t ** 0.7 * 210)   # 더 짙게 → 텍스트 가독성 + 이미지 융합
             ov.line([(0, y), (W, y)], fill=(0, 0, 0, alpha))
 
-        canvas = Image.alpha_composite(canvas, overlay).convert("RGB")
+        canvas_rgba = Image.alpha_composite(canvas, overlay)  # RGBA 유지
 
-        draw = ImageDraw.Draw(canvas)
+        draw = ImageDraw.Draw(canvas_rgba)  # draw가 canvas_rgba에 직접 그림
 
         # 폰트
-        f_meta  = _load(FONT_REGULAR, 19)   # 레이블·페이지·브랜드
-        f_hook  = _load(FONT_BOLD,    70)   # Hook 대형 제목
-        f_title = _load(FONT_BOLD,    52)   # Body 소제목
-        f_body  = _load(FONT_REGULAR, 30)   # Body 본문
+        f_meta  = _load(FONT_META,    18)   # 레이블·페이지·브랜드 (산세리프)
+        f_hook  = _load(FONT_BOLD,   100)   # Hook 2줄 고정 — 크게
+        f_title = _load(FONT_SEMI,    50)   # Body 소제목
+        f_body  = _load(FONT_REGULAR, 28)   # Body 본문
 
         # 3. 상단: 역할 레이블(좌) + 페이지 번호(우)
         label = ROLE_LABEL.get(slide.role, "")
@@ -158,8 +161,7 @@ class SlideGenerator:
         pw       = draw.textlength(page_str, font=f_meta)
         draw.text((W - 60 - pw, 52), page_str, font=f_meta, fill=GREY)
 
-        # 4. 본문 텍스트 배치 (canvas RGBA 전달 → 글로우 합성용)
-        canvas_rgba = canvas.convert("RGBA")
+        # 4. 본문 텍스트 배치 (draw, canvas_rgba 모두 같은 이미지 참조)
         if slide.role == "Hook":
             self._draw_hook(draw, slide.text, f_hook, f_meta, canvas_rgba)
         elif slide.role == "Outro":
@@ -209,12 +211,13 @@ class SlideGenerator:
         """커버 슬라이드: 대형 Bold 후킹 텍스트 중앙 정렬 + 브랜드
         — 잘림 방지: 좌우 안전 여백 160px 확보 후 가운데 정렬
         """
-        max_w = W - 160
-        lines = self._wrap(text, f_hook, draw, max_w)[:3]
-        line_h = 94
+        max_w = W - 120
+        lines = self._wrap(text, f_hook, draw, max_w)[:2]  # 2줄 고정
+        line_h = 124
 
-        # 텍스트 블록 전체를 52% 지점에서 시작
-        y = int(H * 0.52)
+        # 2줄 블록 수직 중앙 정렬 (약간 아래 편향)
+        total_h = len(lines) * line_h
+        y = int((H - total_h) / 2) + int(H * 0.07)
         for line in lines:
             self._draw_text_centered(draw, y, line, f_hook, WHITE,
                                      shadow=True, canvas=canvas)

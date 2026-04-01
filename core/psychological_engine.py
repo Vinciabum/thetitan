@@ -22,25 +22,100 @@ class MonologueContent:
 
 import asyncio
 import json
+from pathlib import Path
 from typing import Any
 
 
 # 5슬라이드 역할 정의
 SLIDE_ROLES = ["Hook", "Context", "Insight", "Action", "Outro"]
 
-# 기본 이미지 스타일 지시 (모든 슬라이드 공통 — AI가 내용에 맞게 장면을 결정)
-IMAGE_STYLE_BASE = (
+# soul.md 경로 (프로젝트 루트)
+_SOUL_PATH = Path(__file__).parent.parent / "soul.md"
+
+
+def _load_soul() -> dict:
+    """soul.md를 읽어서 섹션별로 파싱
+    ## 한글 (EnglishKey) 형식에서 영문 괄호 안을 키로 사용
+    """
+    import re
+    if not _SOUL_PATH.exists():
+        return {}
+    text = _SOUL_PATH.read_text(encoding="utf-8")
+    sections = {}
+    current_key = None
+    current_lines = []
+    for line in text.splitlines():
+        if line.startswith("## "):
+            if current_key:
+                sections[current_key] = "\n".join(current_lines).strip()
+            # "## 페르소나 (Persona)" → key: "persona"
+            m = re.search(r'\(([^)]+)\)', line)
+            if m:
+                current_key = m.group(1).strip().lower().replace(" ", "_")
+            else:
+                current_key = line[3:].strip().lower().replace(" ", "_")
+            current_lines = []
+        elif line.startswith("# "):
+            pass
+        else:
+            current_lines.append(line)
+    if current_key:
+        sections[current_key] = "\n".join(current_lines).strip()
+    return sections
+
+
+def _build_system_persona(soul: dict) -> str:
+    persona   = soul.get("페르소나_persona", soul.get("persona", ""))
+    voice     = soul.get("말투_&_톤_voice", soul.get("voice", ""))
+    prohibited = soul.get("금지_사항_prohibited", soul.get("prohibited", ""))
+    philosophy = soul.get("핵심_철학_philosophy", soul.get("philosophy", ""))
+    if not persona:
+        return _DEFAULT_PERSONA
+    parts = [persona]
+    if philosophy:
+        parts.append(f"\n핵심 철학:\n{philosophy}")
+    if voice:
+        parts.append(f"\n말투: {voice}")
+    if prohibited:
+        parts.append(f"\n금지: {prohibited}")
+    return "\n".join(parts)
+
+
+def _build_image_style(soul: dict) -> str:
+    visual = soul.get("visual_identity", "")
+    if not visual:
+        return _DEFAULT_IMAGE_STYLE
+    # "- 스타일: black and white..." → "black and white..."
+    # 콜론 뒤 영문 부분만 추출, 마크다운 리스트 기호 제거
+    import re
+    parts = []
+    for line in visual.splitlines():
+        line = line.lstrip("- ").strip()
+        if not line:
+            continue
+        # "키워드: 값" 패턴이면 값만 추출
+        m = re.match(r'^[^:：]+[:：]\s*(.+)', line)
+        if m:
+            parts.append(m.group(1).strip())
+        else:
+            parts.append(line)
+    return ", ".join(parts)
+
+
+_DEFAULT_PERSONA = """당신은 빅터 프랭클의 로고테라피 철학을 계승한 20년 경력의 시니어 커리어 코치입니다.
+말투: 1인칭 관찰자 시점, 따뜻하고 신뢰감 있는, 깊이 있는 통찰, 절제된 감성.
+금지: 자극적 언어, 과장된 위로, 상업적 표현."""
+
+_DEFAULT_IMAGE_STYLE = (
     "black and white vintage film photography, "
     "1960s artistic portrait style, soft film grain, high contrast shadows, "
     "no text, no logos, cinematic still photography, introspective mood"
 )
 
-SYSTEM_PERSONA = """당신은 빅터 프랭클의 로고테라피 철학을 계승한 20년 경력의 시니어 커리어 코치입니다.
-당신의 역할은 3040 직장인이 번아웃, 커리어 정체기, 관계의 피로감을 겪을 때
-스토아 철학의 지혜와 의미치료의 통찰로 따뜻하고 실질적인 안내를 제공하는 것입니다.
-
-말투: 1인칭 관찰자 시점, 따뜻하고 신뢰감 있는, 깊이 있는 통찰, 절제된 감성.
-금지: 자극적 언어, 과장된 위로, 상업적 표현."""
+# 런타임에 soul.md 로드
+_soul = _load_soul()
+SYSTEM_PERSONA    = _build_system_persona(_soul)
+IMAGE_STYLE_BASE  = _build_image_style(_soul)
 
 
 class PsychologicalEngine:
@@ -50,15 +125,39 @@ class PsychologicalEngine:
         self.analyzer = content_analyzer
 
     async def generate(self, context: "ContextData") -> MonologueContent:
-        """컨텍스트 기반 5페이지 Monologue 콘텐츠 생성"""
-        try:
-            prompt = self._build_prompt(context)
-            response = await asyncio.to_thread(
-                self.analyzer.generate_content, prompt
-            )
-            return self._parse_response(response.text)
-        except Exception:
-            return self._fallback_content(context)
+        """컨텍스트 기반 5페이지 Monologue 콘텐츠 생성 (훅 검증 + 최대 3회 재시도)"""
+        prompt = self._build_prompt(context)
+        last_exc = None
+        for attempt in range(3):
+            try:
+                response = await asyncio.to_thread(
+                    self.analyzer.generate_content, prompt
+                )
+                result = self._parse_response(response.text)
+                hook_text = result.slides[0].text if result.slides else ""
+                if self._validate_hook(hook_text):
+                    if attempt > 0:
+                        print(f"[PsychEngine] 훅 검증 통과 (시도 {attempt + 1})")
+                    return result
+                print(f"[PsychEngine] 훅 규칙 불통과 (시도 {attempt + 1}): '{hook_text.replace(chr(10), ' / ')}' → 재시도")
+            except Exception as e:
+                last_exc = e
+        print(f"[PsychEngine] 3회 시도 모두 실패 → 폴백 사용 (마지막 오류: {last_exc})")
+        return self._fallback_content(context)
+
+    @staticmethod
+    def _validate_hook(hook: str) -> bool:
+        """훅 품질 검증: 정확히 2줄, 각 줄 한글 글자수 8자 이내"""
+        import re
+        lines = hook.strip().split("\n")
+        if len(lines) != 2:
+            return False
+        for line in lines:
+            # 한글 음절 블록만 카운트 (공백·부호 제외)
+            korean_chars = len(re.sub(r"[^\uAC00-\uD7A3]", "", line))
+            if korean_chars == 0 or korean_chars > 8:
+                return False
+        return True
 
     def _build_prompt(self, context: "ContextData") -> str:
         news_summary = "\n".join(
@@ -76,9 +175,27 @@ class PsychologicalEngine:
 
 각 페이지의 역할:
 
-- P1 (Hook): 스크롤을 멈추게 하는 짧고 강렬한 문장. 반드시 2~3개의 짧은 어절로 끊어서 작성.
-  예시: "오늘도\n버텨낸 것만으로\n충분합니다." 또는 "퇴근 후\n아무 생각도\n하기 싫다면."
-  규칙: 한 줄에 7~10자, 총 2~3줄, 줄바꿈은 \n으로 표시. 질문형보다 선언형 우선.
+- P1 (Hook): 반드시 2줄 고정. 3줄 절대 금지. 한 줄 한글 글자수 8자 초과 금지(공백·부호 제외).
+  두 줄이 합쳐져 하나의 뼈 아픈 관찰이 되어야 함.
+  3040 직장인이 밤에 혼자 보다가 손을 멈추는 문장. 불편하게 정확한 관찰.
+  줄바꿈은 \n. 위로 금지. 결론 금지. 선언형 또는 관찰형.
+
+  한 줄 8자(한글 음절 기준, 공백 제외) 이내 엄수 — 예시로 확인:
+    "열심히 할수록" = 7자 ✓  /  "왜 공허할까" = 5자 ✓
+    "승진했는데" = 5자 ✓      /  "아무 느낌이 없다" = 7자 ✓
+    "번아웃인 줄 알면서" = 8자 ✓  /  "쉬지 못했다" = 5자 ✓
+
+  좋은 예시:
+    "열심히 할수록\n왜 공허할까"
+    "승진했는데\n아무 느낌이 없다"
+    "번아웃인 줄 알면서\n쉬지 못했다"
+    "지쳐있는데\n이유를 모른다"
+    "퇴근했는데\n더 공허하다"
+    "열심히 했는데\n뭘 위해서였지"
+    "회사를 나서면\n나는 없어진다"
+    "잘하고 있는데\n왜 공허할까"
+
+  나쁜 예시 (절대 금지): 3줄, 한 줄 한글 9자 이상, "수고했어요", "버텨낸 것만으로 충분합니다", 위로하는 문장
 
 - P2~P5: 반드시 "소제목\n\n본문" 형식으로 작성 (JSON 문자열 안에서 \n\n 그대로 사용).
   소제목: 슬라이드 핵심을 담은 짧은 문장 (10~18자, Bold 대형으로 표시됨)

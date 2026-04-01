@@ -223,7 +223,7 @@ class AINewsAgent:
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
 
-        fh = logging.FileHandler(f"{self.config.name.lower()}_agent.log")
+        fh = logging.FileHandler(f"{self.config.name.lower()}_agent.log", encoding='utf-8')
         fh.setFormatter(formatter)
         logger.addHandler(fh)
 
